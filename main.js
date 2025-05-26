@@ -3,15 +3,20 @@ import webpush from "web-push";
 
 export default async ({ req, res, log, error }) => {
   try {
-    // ✅ Enforce POST method
+    log("📨 Received request");
+
     if (req.method !== "POST") {
+      log(`❌ Invalid method: ${req.method}`);
       return res.send("Only POST requests are allowed", 405);
     }
 
     const { title, message, icon, url } = JSON.parse(req.body || "{}");
     if (!title || !message) {
+      log("❌ Missing title or message in payload");
       return res.send("Missing required title or message", 400);
     }
+
+    log(`📦 Payload received: ${JSON.stringify({ title, message, icon, url })}`);
 
     const client = new Client()
       .setEndpoint(process.env.APPWRITE_ENDPOINT)
@@ -23,8 +28,9 @@ export default async ({ req, res, log, error }) => {
     const collectionId = process.env.SUBSCRIPTIONS_COLLECTION_ID;
 
     const response = await databases.listDocuments(dbId, collectionId);
-
     const subscriptions = response.documents.map((doc) => JSON.parse(doc.subscription));
+
+    log(`📬 Found ${subscriptions.length} subscriptions`);
 
     webpush.setVapidDetails(
       "mailto:admin@growbuddy.club",
@@ -37,8 +43,8 @@ export default async ({ req, res, log, error }) => {
         title,
         body: message,
         icon: icon || "/assets/icons/GrowB-192x192.jpeg",
-        data: { url: url || "https://www.growbuddy.club" },
-      },
+        data: { url: url || "https://www.growbuddy.club" }
+      }
     });
 
     const results = await Promise.allSettled(
