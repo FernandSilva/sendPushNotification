@@ -11,9 +11,9 @@ export default async ({ req, res, log, error }) => {
 
     // Initialize Appwrite client
     const client = new Client()
-      .setEndpoint(process.env.APPWRITE_ENDPOINT)
-      .setProject(process.env.APPWRITE_PROJECT_ID)
-      .setKey(process.env.APPWRITE_API_KEY);
+      .setEndpoint(process.env.APPWRITE_ENDPOINT)           // e.g., https://cloud.appwrite.io/v1
+      .setProject(process.env.APPWRITE_PROJECT_ID)          // your project ID
+      .setKey(process.env.APPWRITE_API_KEY);                // your API key (or function key)
 
     const databases = new Databases(client);
 
@@ -22,17 +22,23 @@ export default async ({ req, res, log, error }) => {
     const collectionId = process.env.SUBSCRIPTIONS_COLLECTION_ID;
 
     const response = await databases.listDocuments(dbId, collectionId);
-
-    const subscriptions = response.documents.map((doc) => JSON.parse(doc.subscription));
+    const subscriptions = response.documents.map((doc) => {
+      try {
+        return JSON.parse(doc.subscription);
+      } catch (e) {
+        log(`⚠️ Invalid subscription JSON in document ${doc.$id}`);
+        return null;
+      }
+    }).filter(Boolean);
 
     // Configure web-push
     webpush.setVapidDetails(
-      "mailto:admin@growbuddy.club",
+      "mailto:admin@growbuddy.club",                        // Update if needed
       process.env.VAPID_PUBLIC_KEY,
       process.env.VAPID_PRIVATE_KEY
     );
 
-    // Payload for push message
+    // Prepare notification payload
     const notificationPayload = JSON.stringify({
       notification: {
         title,
@@ -46,13 +52,13 @@ export default async ({ req, res, log, error }) => {
     const results = await Promise.allSettled(
       subscriptions.map((sub) =>
         webpush.sendNotification(sub, notificationPayload).catch((err) => {
-          error(`❌ Failed for one subscription: ${err.message}`);
+          error(`❌ Push failed for 1 subscriber: ${err.message}`);
         })
       )
     );
 
     const successCount = results.filter(r => r.status === "fulfilled").length;
-    log(`✅ Push sent to ${successCount} subscriptions`);
+    log(`✅ Push sent to ${successCount} subscription(s).`);
 
     return res.json({ success: true, sent: successCount });
   } catch (err) {
