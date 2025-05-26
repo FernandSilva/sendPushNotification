@@ -4,20 +4,23 @@ import webpush from "web-push";
 export default async ({ req, res, log, error }) => {
   log("📨 Received request");
 
+  if (req.method !== "POST") {
+    error("❌ Invalid request method: Only POST is accepted");
+    return res.send("Method Not Allowed", 405);
+  }
+
   try {
-    // ✅ Extract variables instead of raw body
-    const title = req.variables?.title;
-    const message = req.variables?.message;
-    const icon = req.variables?.icon || "https://www.growbuddy.club/assets/icons/GrowB-192x192.jpeg";
-    const url = req.variables?.url || "https://www.growbuddy.club";
+    const body = JSON.parse(req.body || "{}");
+    log(`📦 Payload received: ${JSON.stringify(body)}`);
+
+    const { title, message, icon, url } = body;
 
     if (!title || !message) {
-      return res.send("❌ Missing required title or message", 400);
+      error("❌ Missing required fields: title or message");
+      return res.send("Missing required title or message", 400);
     }
 
-    log("📦 Variables received:", { title, message, icon, url });
-
-    // Initialize Appwrite client
+    // Initialize Appwrite Client
     const client = new Client()
       .setEndpoint(process.env.APPWRITE_ENDPOINT)
       .setProject(process.env.APPWRITE_PROJECT_ID)
@@ -25,45 +28,61 @@ export default async ({ req, res, log, error }) => {
 
     const databases = new Databases(client);
 
-    // Fetch subscriptions
-    const response = await databases.listDocuments(
-      process.env.APPWRITE_DATABASE_ID,
-      process.env.SUBSCRIPTIONS_COLLECTION_ID
-    );
+    const dbId = process.env.APPWRITE_DATABASE_ID;
+    const collectionId = process.env.SUBSCRIPTIONS_COLLECTION_ID;
 
-    const subscriptions = response.documents.map((doc) =>
-      JSON.parse(doc.subscription)
-    );
+    log(`📚 Fetching subscriptions from DB: ${dbId}, collection: ${collectionId}`);
 
+    const response = await databases.listDocuments(dbId, collectionId);
+    const subscriptions = response.documents.map((doc) => {
+      try {
+        return JSON.parse(doc.subscription);
+      } catch (err) {
+        error(`❌ Failed to parse subscription JSON: ${err.message}`);
+        return null;
+      }
+    }).filter(Boolean);
+
+    if (subscriptions.length === 0) {
+      log("⚠️ No subscriptions found to send notifications to.");
+      return res.send("No subscribers", 200);
+    }
+
+    // Configure VAPID
     webpush.setVapidDetails(
       "mailto:admin@growbuddy.club",
       process.env.VAPID_PUBLIC_KEY,
       process.env.VAPID_PRIVATE_KEY
     );
 
-    const payload = JSON.stringify({
+    const notificationPayload = JSON.stringify({
       notification: {
         title,
         body: message,
-        icon,
-        data: { url }
+        icon: icon || "/assets/icons/GrowB-192x192.jpeg",
+        data: { url: url || "https://www.growbuddy.club" }
       }
     });
 
-    const results = await Promise.allSettled(
-      subscriptions.map((sub) =>
-        webpush.sendNotification(sub, payload).catch((err) => {
-          error(`❌ Push failed for one sub: ${err.message}`);
-        })
-      )
-    );
+    // Send push notifications
+    log(`🚀 Sending notifications to ${subscriptions.length} clients...`);
+    let successCount = 0;
+    let failureCount = 0;
 
-    const successCount = results.filter((r) => r.status === "fulfilled").length;
-    log(`✅ Push sent to ${successCount} subscriptions`);
+    for (const sub of subscriptions) {
+      try {
+        await webpush.sendNotification(sub, notificationPayload);
+        successCount++;
+      } catch (err) {
+        failureCount++;
+        error(`❌ Failed to send notification: ${err.message}`);
+      }
+    }
 
-    return res.json({ success: true, sent: successCount });
+    log(`✅ Notifications sent: ${successCount}, ❌ Failed: ${failureCount}`);
+    return res.json({ success: true, sent: successCount, failed: failureCount });
   } catch (err) {
-    error(`❌ Function failed: ${err.message}`);
+    error(`❌ Unexpected failure: ${err.message}`);
     return res.send(`Error: ${err.message}`, 500);
   }
 };
