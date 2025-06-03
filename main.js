@@ -74,13 +74,16 @@ export default async ({ req, res, log, error }) => {
 
     for (const sub of subscriptions) {
       try {
-        await webpush.sendNotification(sub, notificationPayload); // ✅ Removed custom headers
+        log(`📤 Sending push to endpoint: ${sub.endpoint}`);
+        await webpush.sendNotification(sub, notificationPayload); // This fails silently now
+        log("✅ Notification sent successfully");
         successCount++;
       } catch (err) {
         failureCount++;
         error(`❌ Failed to send notification: ${err.message}`);
       }
     }
+    
 
     log(`✅ Notifications sent: ${successCount}, ❌ Failed: ${failureCount}`);
     return res.json({ success: true, sent: successCount, failed: failureCount });
