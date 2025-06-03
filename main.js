@@ -10,7 +10,7 @@ export default async ({ req, res, log, error }) => {
   }
 
   try {
-    const body = typeof req.payload === "string" ? JSON.parse(req.payload) : {};
+    const body = JSON.parse(req.body || "{}");
 
     log(`📦 Payload received: ${JSON.stringify(body)}`);
 
@@ -35,21 +35,23 @@ export default async ({ req, res, log, error }) => {
     log(`📚 Fetching subscriptions from DB: ${dbId}, collection: ${collectionId}`);
 
     const response = await databases.listDocuments(dbId, collectionId);
-    const subscriptions = response.documents.map((doc) => {
-      try {
-        return JSON.parse(doc.subscription);
-      } catch (err) {
-        error(`❌ Failed to parse subscription JSON: ${err.message}`);
-        return null;
-      }
-    }).filter(Boolean);
+    const subscriptions = response.documents
+      .map((doc) => {
+        try {
+          return JSON.parse(doc.subscription);
+        } catch (err) {
+          error(`❌ Failed to parse subscription JSON: ${err.message}`);
+          return null;
+        }
+      })
+      .filter(Boolean);
 
     if (subscriptions.length === 0) {
       log("⚠️ No subscriptions found to send notifications to.");
       return res.send("No subscribers", 200);
     }
 
-    // Configure VAPID
+    // Configure VAPID keys
     webpush.setVapidDetails(
       "mailto:admin@growbuddy.club",
       process.env.VAPID_PUBLIC_KEY,
@@ -60,7 +62,7 @@ export default async ({ req, res, log, error }) => {
       notification: {
         title,
         body: message,
-        icon: icon || "/assets/icons/GrowB-192x192.jpeg",
+        icon: icon || "https://www.growbuddy.club/assets/icons/GrowB-192x192.jpeg",
         data: { url: url || "https://www.growbuddy.club" }
       }
     });
