@@ -59,13 +59,12 @@ export default async ({ req, res, log, error }) => {
     );
 
     const notificationPayload = JSON.stringify({
-      notification: {
-        title,
-        body: message,
-        icon: icon || "https://www.growbuddy.club/assets/icons/GrowB-192x192.jpeg",
-        data: { url: url || "https://www.growbuddy.club" }
-      }
+      title,
+      body: message,
+      icon: icon || "https://www.growbuddy.club/assets/icons/GrowB-192x192.jpeg",
+      data: { url: url || "https://www.growbuddy.club" }
     });
+    
 
     // Send push notifications
     log(`🚀 Sending notifications to ${subscriptions.length} clients...`);
