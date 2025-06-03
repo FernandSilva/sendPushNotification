@@ -4,13 +4,17 @@ import webpush from "web-push";
 export default async ({ req, res, log, error }) => {
   log("📨 Received request");
 
+  // ✅ Ensure only POST requests are allowed
   if (req.method !== "POST") {
     error("❌ Invalid request method: Only POST is accepted");
     return res.send("Method Not Allowed", 405);
   }
 
   try {
-    const body = typeof req.payload === "string" ? JSON.parse(req.payload) : req.payload || {};
+    // ✅ Fallback to req.body if req.payload is missing
+    const rawPayload = req.payload || req.body || "{}";
+    const body = typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload;
+
     log(`📦 Payload received: ${JSON.stringify(body)}`);
 
     const { title, message, icon, url } = body;
@@ -20,7 +24,7 @@ export default async ({ req, res, log, error }) => {
       return res.send("Missing required title or message", 400);
     }
 
-    // Initialize Appwrite Client
+    // ✅ Initialize Appwrite client
     const client = new Client()
       .setEndpoint(process.env.APPWRITE_ENDPOINT)
       .setProject(process.env.APPWRITE_PROJECT_ID)
@@ -51,7 +55,7 @@ export default async ({ req, res, log, error }) => {
       return res.send("No subscribers", 200);
     }
 
-    // Configure VAPID
+    // ✅ Set VAPID credentials
     webpush.setVapidDetails(
       "mailto:admin@growbuddy.club",
       process.env.VAPID_PUBLIC_KEY,
@@ -69,7 +73,7 @@ export default async ({ req, res, log, error }) => {
       },
     });
 
-    // ✅ Send notifications with correct header
+    // ✅ Send notifications with proper headers
     log(`🚀 Sending notifications to ${subscriptions.length} clients...`);
 
     let successCount = 0;
