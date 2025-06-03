@@ -10,7 +10,8 @@ export default async ({ req, res, log, error }) => {
   }
 
   try {
-    const body = JSON.parse(req.body || "{}");
+    const body = typeof req.payload === "string" ? JSON.parse(req.payload) : {};
+
     log(`📦 Payload received: ${JSON.stringify(body)}`);
 
     const { title, message, icon, url } = body;
